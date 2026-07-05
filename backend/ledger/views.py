@@ -89,7 +89,7 @@ def parse_input(request):
             contents = f"Parse this receipt text:\n{text_input}\n\n{SYSTEM_PROMPT}"
 
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash",
             contents=contents,
             config=genai_types.GenerateContentConfig(
                 temperature=0.0,

@@ -12,14 +12,19 @@ from openai import OpenAI
 from .models import Transaction
 from .serializers import TransactionSerializer
 
-# NOTE (approved deviation from BUILD.md): provider is Google Gemini API (OpenAI-compatible),
-# not Zhipu/OpenAI. Same SDK, same code path -- only base_url + model names differ.
+# NOTE: provider is Google Gemini API (OpenAI-compatible).
+# The client is created lazily inside parse_input() so that missing
+# API keys don't crash auth endpoints (register/login) at module load.
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
-client = OpenAI(
-    api_key=settings.OPENAI_API_KEY,
-    base_url=GEMINI_BASE_URL,
-)
+def _get_gemini_client():
+    """Return a lazily-created Gemini/OpenAI client. Raises clearly if key is missing."""
+    api_key = getattr(settings, 'OPENAI_API_KEY', '') or ''
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY is not configured. Set it as an environment variable."
+        )
+    return OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
 
 SYSTEM_PROMPT = """
 You are a data extraction bot for small Indian businesses. Extract ledger transactions from the provided input.
@@ -135,7 +140,7 @@ def parse_input(request):
     try:
         # Gemini 2.5 Flash supports both text and multimodal image inputs
         model = "gemini-2.5-flash"
-        response = client.chat.completions.create(
+        response = _get_gemini_client().chat.completions.create(
             model=model,
             messages=messages,
             temperature=0.0,

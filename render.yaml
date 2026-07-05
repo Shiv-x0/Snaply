@@ -17,10 +17,10 @@ services:
   # Vite Frontend Static Site
   - type: web
     name: snaply-frontend
-    env: static
+    runtime: static
     rootDir: frontend
     buildCommand: "npm run build"
-    staticPublishPath: "frontend/dist"
+    publishPath: "frontend/dist"
     envVars:
       - key: VITE_API_BASE_URL
         value: "https://snaply-backend.onrender.com"

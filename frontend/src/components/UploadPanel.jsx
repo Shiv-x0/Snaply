@@ -28,7 +28,7 @@ export default function UploadPanel({ onSuccess, setLoading }) {
 
     try {
       await axios.post(`${API_BASE}/api/parse/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data', Authorization: `Token ${token}` }
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       setSuccess('Receipt parsed successfully');
       onSuccess();

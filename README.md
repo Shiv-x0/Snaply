@@ -1,100 +1,125 @@
 # Snaply — Automated Receipt Ledger
 
-Snaply is a modern, light-theme ledger application that transforms paper receipt photos into categorized transaction records. Powered by Google Gemini's vision model, Snaply automates entry logs, tracks category expenses, and updates dashboard metrics in real time.
+Snaply is a modern, enterprise-grade bookkeeping application that transforms paper receipt photos into structured transaction records. Powered by Gemini 2.5 Flash, Snaply automates receipt ingestion, extracts line-item totals, determines payment methods, classifies expenditures, and generates interactive dashboard visualizations in real-time.
+
+Live Application: **[https://snaply-d43h.vercel.app/](https://snaply-d43h.vercel.app/)**
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-<p align="center">
-  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
-  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
-  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="TailwindCSS" />
-  <br />
-  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/Django-092E20?style=for-the-badge&logo=django&logoColor=white" alt="Django" />
-  <img src="https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" />
-  <br />
-  <img src="https://img.shields.io/badge/Google%20Gemini-121011?style=for-the-badge&logo=google-gemini&logoColor=FBBC05" alt="Gemini Vision" />
-  <img src="https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white" alt="Render Hosting" />
+<p align="left">
+  <img src="https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="TailwindCSS" />
+  <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Django-092E20?style=flat-square&logo=django&logoColor=white" alt="Django" />
+  <img src="https://img.shields.io/badge/SQLite-07405E?style=flat-square&logo=sqlite&logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/Google%20Gemini%20API-121011?style=flat-square&logo=google-gemini&logoColor=FBBC05" alt="Gemini API" />
+  <img src="https://img.shields.io/badge/Render-46E3B7?style=flat-square&logo=render&logoColor=white" alt="Render" />
+  <img src="https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel" />
 </p>
 
 ---
 
-## ✨ Features
+## Key Features
 
-- **Gemini-Powered OCR Vision:** Upload any receipt photo. The AI automatically parses items, quantity, prices, payment status, and categorization.
-- **Interactive Data Visualizations:** Clean area charts showing daily transaction volumes and circular donut charts highlighting weekly category splits.
-- **Audit Health Grade:** Keep track of compliance and bookkeeping performance with visual grading metrics (Audit Health Score & Grade cards).
-- **Multi-Tenant Credentials:** Secure login, account registration, and Admin panel metrics scoped to specific account permissions.
-- **Clean Light Theme Layout:** A modern, visual dashboard experience modeled after enterprise-grade SaaS aesthetics.
-- **CSV Data Exporter:** One-click utility download of transaction ledgers in CSV formatting.
+- **Zero-Authentication Access:** Streamlined visitor experience allowing immediate interaction. Every visitor accesses a shared sandbox ledger automatically.
+- **Gemini Ingestion Engine:** Multimodal receipt ingestion utilizing the official `google-genai` SDK. Supports extracting unit prices, item quantities, payment channels, and transaction dates.
+- **Saas-Style Aesthetics:** Modeled directly after Render's clean, professional visual layout—featuring dark indigo accent patterns, flat card elements, and clear data grids.
+- **Activity Visualization:** Revenue trend area charts and category-breakdown donut graphs built using Recharts.
+- **Audit Analytics:** Automatic calculations of average transaction values, monthly volume growth, and bookkeeping audit health scores.
+- **CSV Exporter:** Download transaction history files instantly for spreadsheets.
 
 ---
 
-## 🚀 Quick Start Guide
+## Getting Started Locally
 
-### 1. Clone the repository
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/Shiv-x0/Snaply.git
 cd Snaply
 ```
 
-### 2. Set up Backend API (Django)
-Ensure you have Python 3.10+ installed.
+### 2. Configure Backend API (Django)
+Ensure Python 3.10+ is installed.
 
 ```bash
-# Navigate to backend
+# Navigate to backend directory
 cd backend
 
-# Create virtual environment & activate it
+# Create and activate virtual environment
 python -m venv venv
-# On Windows:
+# Windows:
 .\venv\Scripts\activate
-# On Linux/macOS:
+# macOS/Linux:
 source venv/bin/activate
 
-# Install requirements
+# Install dependencies
 pip install -r requirements.txt
 
-# Run migrations & seed demo transactions
+# Run migrations
 python manage.py migrate
-python manage.py seed_data
 
-# Start the Django server
+# Seed baseline demo data
+python manage.py seed_data
+```
+
+Create a `.env` file inside the `backend/` directory:
+```env
+GEMINI_API_KEY=your_google_ai_studio_api_key
+DJANGO_SECRET_KEY=local_development_secret_key
+DEBUG=True
+```
+
+Start the Django development server:
+```bash
 python manage.py runserver
 ```
-The API server will launch at `http://localhost:8000`.
-
-*Demo Credentials:*
-* **Standard Account:** User: `alex`, Password: `password123`
-* **Admin Account:** User: `admin`, Password: `password123`
+The backend API will run at `http://localhost:8000`.
 
 ---
 
-### 3. Set up Frontend Dashboard (React + Vite)
-Ensure you have Node.js 18+ installed.
+### 3. Configure Frontend (React + Vite)
+Ensure Node.js 18+ is installed.
 
 ```bash
-# Navigate to frontend
+# Navigate to frontend directory
 cd ../frontend
 
-# Install dependencies
+# Install node packages
 npm install
+```
 
-# Start local server
+Create a `.env` file inside the `frontend/` directory:
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+Start the Vite development server:
+```bash
 npm run dev
 ```
-Open **`http://localhost:5173`** in your web browser to log in and start scanning!
+Open your browser to `http://localhost:5173`.
 
 ---
 
-## ☁️ Production Deployment on Render
+## Production Deployment Architecture
 
-Snaply includes a pre-configured `render.yaml` blueprint. To deploy:
+This project is optimized for a split-deployment configuration:
 
-1. Push this repository to your GitHub account.
-2. Log in to your **Render Dashboard** and select **Blueprints**.
-3. Link this repository. Render will spin up:
-   - **Backend Web Service:** Builds and runs migrations via `build.sh` on Render.
-   - **Frontend Static Site:** Compiles Vite resources and deploys to static storage.
+### Backend (Render Web Service)
+- **Root Directory:** `backend`
+- **Build Command:** `./build.sh`
+- **Start Command:** `gunicorn backend.wsgi:application`
+- **Environment Variables:**
+  - `GEMINI_API_KEY`: Google AI Studio API key
+  - `DJANGO_SECRET_KEY`: Django application secret key
+  - `PYTHON_VERSION`: `3.11.0`
+
+### Frontend (Vercel Static Hosting)
+- **Root Directory:** `frontend`
+- **Build Command:** `npm run build`
+- **Output Directory:** `dist`
+- **Environment Variables:**
+  - `VITE_API_BASE_URL`: Live Render backend URL (e.g. `https://snaply-backend.onrender.com`)

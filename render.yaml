@@ -15,9 +15,8 @@ services:
         value: "YOUR_GEMINI_API_KEY_HERE"
 
   # Vite Frontend Static Site
-  - type: web
+  - type: static
     name: snaply-frontend
-    env: static
     rootDir: frontend
     buildCommand: "npm run build"
     publishPath: "frontend/dist"

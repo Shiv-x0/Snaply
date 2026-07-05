@@ -1,5 +1,6 @@
 import json
 import io
+import re
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
@@ -7,6 +8,33 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from .models import Transaction
 from .serializers import TransactionSerializer
+
+def _extract_json(text):
+    """Robustly extract and parse a JSON object from text containing potential code fences or conversational text."""
+    text_clean = text.strip()
+    try:
+        return json.loads(text_clean)
+    except json.JSONDecodeError:
+        pass
+
+    # Match anything between ```json ... ``` or ``` ... ```
+    match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text_clean)
+    if match:
+        try:
+            return json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback to finding the first '{' and last '}'
+    start = text_clean.find('{')
+    end = text_clean.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text_clean[start:end+1])
+        except json.JSONDecodeError:
+            pass
+
+    raise json.JSONDecodeError("Could not locate a valid JSON object in model response", text_clean, 0)
 
 # ─── Shared Demo User ─────────────────────────────────────────────────────────
 # No authentication. All requests use a single shared "snaply" user.
@@ -96,11 +124,7 @@ def parse_input(request):
                 max_output_tokens=2048,
             )
         )
-        raw = response.text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-        parsed_data = json.loads(raw)
+        parsed_data = _extract_json(response.text)
 
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)

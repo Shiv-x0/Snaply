@@ -3,65 +3,87 @@ import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+const IconUploadCloud = () => (
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
 export default function UploadPanel({ onSuccess, setLoading }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [fileName, setFileName] = useState('');
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
+  const processFile = async (file) => {
     if (!file) return;
-    
     const token = localStorage.getItem('snaply_token');
     setLoading(true);
     setError('');
     setSuccess('');
+    setFileName(file.name);
+
     const formData = new FormData();
     formData.append('image', file);
 
     try {
       await axios.post(`${API_BASE}/api/parse/`, formData, {
-        headers: { 
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Token ${token}`
-        }
+        headers: { 'Content-Type': 'multipart/form-data', Authorization: `Token ${token}` }
       });
-      e.target.value = ''; // reset input
-      setSuccess('Successfully parsed receipt image!');
+      setSuccess('Receipt parsed successfully');
       onSuccess();
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to parse image");
+      setError(err.response?.data?.error || 'Failed to parse image. Please try again.');
+      setFileName('');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleChange = (e) => processFile(e.target.files[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) processFile(file);
+    else setError('Please drop a valid image file.');
+  };
+
   return (
-    <div className="p-6 rounded-2xl shadow-sm border app-card">
-      <h2 className="text-base font-bold mb-1 app-text-primary">Log Receipt Photo</h2>
-      <p className="text-xs app-text-secondary mb-6">Upload a photo of your paper receipt to instantly extract ledger items.</p>
+    <div className="card card-md">
+      <h2 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', margin: '0 0 4px' }}>Upload Receipt</h2>
+      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 20px' }}>
+        Upload a photo of your receipt. Gemini AI will extract all line items automatically.
+      </p>
 
-      <div className="w-full">
-        <div className="flex items-center justify-center w-full">
-          <label className="flex flex-col items-center justify-center w-full h-48 border border-dashed rounded-xl cursor-pointer hover:bg-gray-50/20 transition-all border-[var(--card-border)]">
-            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-              <svg className="w-10 h-10 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-              </svg>
-              <p className="mb-1 text-xs app-text-primary"><span className="font-bold text-orange-500">Click to upload</span> or drag receipt</p>
-              <p className="text-[10px] app-text-secondary">PNG, JPG, JPEG up to 10MB</p>
-            </div>
-            <input 
-              type="file" 
-              accept="image/*" 
-              onChange={handleImageUpload} 
-              className="hidden" 
-            />
-          </label>
+      <label
+        className="upload-zone"
+        style={{ borderColor: isDragging ? 'var(--accent)' : undefined, background: isDragging ? 'rgba(124,58,237,0.03)' : undefined, cursor: 'pointer' }}
+        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+      >
+        <div style={{ color: isDragging ? 'var(--accent)' : 'var(--text-tertiary)', marginBottom: '12px' }}>
+          <IconUploadCloud />
         </div>
-      </div>
+        <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>
+          {fileName ? fileName : 'Click to upload or drag and drop'}
+        </p>
+        <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-tertiary)' }}>PNG, JPG, JPEG — max 10MB</p>
+        <input type="file" accept="image/*" onChange={handleChange} style={{ display: 'none' }} />
+      </label>
 
-      {success && <p className="mt-4 text-xs text-green-600 font-semibold bg-green-50/50 p-3 rounded-xl border border-green-100 text-center animate-pulse">{success}</p>}
-      {error && <p className="mt-4 text-xs text-red-600 font-semibold bg-red-50/50 p-3 rounded-xl border border-red-150 text-center">{error}</p>}
+      {success && (
+        <div style={{ marginTop: '12px', padding: '10px 14px', background: 'var(--green-light)', border: '1px solid #86efac', borderRadius: 'var(--radius)', fontSize: '12px', color: 'var(--green)', fontWeight: '500' }}>
+          {success}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: '12px', padding: '10px 14px', background: 'var(--red-light)', border: '1px solid #fca5a5', borderRadius: 'var(--radius)', fontSize: '12px', color: 'var(--red)', fontWeight: '500' }}>
+          {error}
+        </div>
+      )}
     </div>
   );
 }

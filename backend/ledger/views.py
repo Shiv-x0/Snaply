@@ -89,11 +89,11 @@ def parse_input(request):
             contents = f"Parse this receipt text:\n{text_input}\n\n{SYSTEM_PROMPT}"
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             contents=contents,
             config=genai_types.GenerateContentConfig(
                 temperature=0.0,
-                max_output_tokens=1024,
+                max_output_tokens=2048,
             )
         )
         raw = response.text.strip()

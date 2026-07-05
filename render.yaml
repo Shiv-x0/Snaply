@@ -20,7 +20,7 @@ services:
     env: static
     rootDir: frontend
     buildCommand: "npm run build"
-    staticPublishPath: "frontend/dist"
+    staticPublishPath: "dist"
     envVars:
       - key: VITE_API_BASE_URL
         value: "https://snaply-backend.onrender.com"

@@ -1,0 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg-main: #f8fafc;
+  --text-primary: #1f2937;
+  --text-secondary: #9ca3af;
+  --card-bg: #ffffff;
+  --card-border: rgba(243, 244, 246, 0.8);
+  --sidebar-bg: #ffffff;
+  --sidebar-border: rgba(229, 231, 235, 0.8);
+  --input-bg: #f8fafc;
+  
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+}
+
+/* Global utility classes */
+.app-container {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+}
+
+.app-card {
+  background-color: var(--card-bg) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.app-sidebar {
+  background-color: var(--sidebar-bg) !important;
+  border-color: var(--sidebar-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.app-text-primary {
+  color: var(--text-primary) !important;
+}
+
+.app-text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+.app-input {
+  background-color: var(--input-bg) !important;
+  border-color: var(--card-border) !important;
+  color: var(--text-primary) !important;
+}

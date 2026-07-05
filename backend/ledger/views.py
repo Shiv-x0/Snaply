@@ -1,5 +1,6 @@
 import json
 import base64
+import io
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -8,162 +9,190 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
-from openai import OpenAI
 from .models import Transaction
 from .serializers import TransactionSerializer
 
-# NOTE: provider is Google Gemini API (OpenAI-compatible).
-# The client is created lazily inside parse_input() so that missing
-# API keys don't crash auth endpoints (register/login) at module load.
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+# ─── Gemini Setup ────────────────────────────────────────────────────────────
+# Uses the official google-genai SDK (google-genai package).
+# Key is read lazily so auth endpoints never crash if key is missing.
 
 def _get_gemini_client():
-    """Return a lazily-created Gemini/OpenAI client. Raises clearly if key is missing."""
-    api_key = getattr(settings, 'OPENAI_API_KEY', '') or ''
+    """Return a configured Gemini client. Raises ValueError if key is missing."""
+    try:
+        from google import genai
+    except ImportError:
+        raise RuntimeError("google-genai package is not installed.")
+
+    api_key = getattr(settings, 'GEMINI_API_KEY', '') or ''
     if not api_key:
         raise ValueError(
-            "GEMINI_API_KEY is not configured. Set it as an environment variable."
+            "GEMINI_API_KEY is not set. Add it to your Render environment variables."
         )
-    return OpenAI(api_key=api_key, base_url=GEMINI_BASE_URL)
 
-SYSTEM_PROMPT = """
-You are a data extraction bot for small Indian businesses. Extract ledger transactions from the provided input.
-Return ONLY valid JSON matching this exact schema. No markdown fences, no commentary, no extra text.
-Schema:
+    return genai.Client(api_key=api_key)
+
+
+SYSTEM_PROMPT = """You are a receipt parser for small Indian businesses.
+Extract ALL line items from the receipt image or text provided.
+Return ONLY valid JSON — no markdown fences, no commentary, no extra text.
+
+Required JSON schema:
 {
-  "transactions": [{"item": "string", "qty": number, "price": number, "category": "string"}],
+  "transactions": [
+    {"item": "string", "qty": number, "price": number, "category": "string"}
+  ],
   "total": number,
   "payment_method": "cash" | "upi" | "card" | "unknown"
 }
-If the input is garbled or empty, return: {"transactions": [], "total": 0, "payment_method": "unknown"}
-"""
+
+Category must be one of: Food, Stationery, Utilities, Travel, Electronics, Clothing, General.
+Price should be the UNIT price (not total for that line).
+If input is unreadable, return: {"transactions": [], "total": 0, "payment_method": "unknown"}"""
+
+
+# ─── Auth Views ──────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
 def register_user(request):
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '').strip()
-    email = request.data.get('email', '').strip()
-    
+    email    = request.data.get('email', '').strip()
+
     if not username or not password:
-        return Response({"error": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+        return Response(
+            {"error": "Username and password are required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     if User.objects.filter(username=username).exists():
-        return Response({"error": "Username already exists"}, status=status.HTTP_400_BAD_REQUEST)
-        
+        return Response(
+            {"error": "Username already taken. Please choose another."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     user = User.objects.create_user(username=username, password=password, email=email)
     token, _ = Token.objects.get_or_create(user=user)
-    
+
     return Response({
-        "token": token.key,
+        "token":    token.key,
         "username": user.username,
         "is_staff": user.is_staff
     }, status=status.HTTP_201_CREATED)
+
 
 @api_view(['POST'])
 def login_user(request):
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '').strip()
-    
+
     if not username or not password:
-        return Response({"error": "Username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
-        
+        return Response(
+            {"error": "Username and password are required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     user = authenticate(username=username, password=password)
     if not user:
-        return Response({"error": "Invalid credentials"}, status=status.HTTP_400_BAD_REQUEST)
-        
+        return Response(
+            {"error": "Incorrect username or password."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     token, _ = Token.objects.get_or_create(user=user)
-    
+
     return Response({
-        "token": token.key,
+        "token":    token.key,
         "username": user.username,
         "is_staff": user.is_staff
     })
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def admin_metrics(request):
-    if not request.user.is_staff:
-        return Response({"error": "Admin access required"}, status=status.HTTP_403_FORBIDDEN)
-        
-    total_users = User.objects.count()
-    total_transactions = Transaction.objects.count()
-    
-    # Calculate total revenue
-    all_txns = Transaction.objects.all()
-    total_revenue = sum(float(t.price) * t.quantity for t in all_txns)
-    
-    # Source type breakdown
-    sources = {'text': 0, 'image': 0, 'voice': 0, 'seed': 0}
-    for t in all_txns:
-        src = t.source_type
-        sources[src] = sources.get(src, 0) + 1
-        
-    # Payment method breakdown
-    payment_methods = {'cash': 0, 'upi': 0, 'card': 0, 'unknown': 0}
-    for t in all_txns:
-        pm = t.payment_method
-        payment_methods[pm] = payment_methods.get(pm, 0) + 1
-        
-    return Response({
-        "total_users": total_users,
-        "total_transactions": total_transactions,
-        "total_revenue": total_revenue,
-        "source_breakdown": sources,
-        "payment_breakdown": payment_methods
-    })
+
+# ─── Parse Receipt (AI) ──────────────────────────────────────────────────────
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def parse_input(request):
-    text_input = request.data.get('text', '').strip()
     image_file = request.FILES.get('image')
+    text_input = request.data.get('text', '').strip()
     source_type = 'text'
 
-    if not text_input and not image_file:
-        return Response({"error": "No text or image provided"}, status=status.HTTP_400_BAD_REQUEST)
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    if image_file:
-        source_type = 'image'
-        image_data = base64.b64encode(image_file.read()).decode('utf-8')
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Extract the items, quantities, prices, and payment method from this receipt image."},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
-            ]
-        })
-    else:
-        messages.append({"role": "user", "content": text_input})
-
-    try:
-        # Gemini 2.5 Flash supports both text and multimodal image inputs
-        model = "gemini-2.5-flash"
-        response = _get_gemini_client().chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.0,
-            max_tokens=1000
+    if not image_file and not text_input:
+        return Response(
+            {"error": "Please provide an image or text to parse."},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-        raw_content = response.choices[0].message.content.strip()
-        # Fallback if AI wraps in ```json ... ```
-        if raw_content.startswith("```"):
-            raw_content = raw_content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    try:
+        from google import genai as google_genai
+        from google.genai import types as genai_types
 
-        parsed_data = json.loads(raw_content)
+        client = _get_gemini_client()
+
+        if image_file:
+            source_type = 'image'
+            from PIL import Image as PILImage
+            img_bytes = image_file.read()
+            img = PILImage.open(io.BytesIO(img_bytes))
+            if img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=90)
+            img_bytes = buf.getvalue()
+
+            contents = [
+                genai_types.Part.from_bytes(data=img_bytes, mime_type='image/jpeg'),
+                "Extract ALL items from this receipt. " + SYSTEM_PROMPT
+            ]
+        else:
+            contents = f"Parse this receipt text:\n{text_input}\n\n{SYSTEM_PROMPT}"
+
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=contents,
+            config=genai_types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=1024,
+            )
+        )
+        raw = response.text.strip()
+
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        parsed_data = json.loads(raw)
+
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     except json.JSONDecodeError:
-        return Response({"error": "AI returned malformed data. Try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    except Exception as e:
-        # Catches OpenAI API timeouts, rate limits, auth errors
-        return Response({"error": f"AI Processing failed: {str(e)}"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(
+            {"error": "AI returned unreadable data. Please try a clearer image."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-    # Save to DB
-    created_transactions = []
+    except Exception as e:
+        err_msg = str(e)
+        if 'API_KEY' in err_msg or 'api key' in err_msg.lower() or 'API_KEY_INVALID' in err_msg:
+            return Response(
+                {"error": "Gemini API key is invalid. Please contact the app admin."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        if 'quota' in err_msg.lower() or 'limit' in err_msg.lower():
+            return Response(
+                {"error": "API quota exceeded. Please try again in a few minutes."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+        return Response(
+            {"error": f"Receipt parsing failed: {err_msg}"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    # Save parsed transactions to DB
+    created = []
     for t in parsed_data.get('transactions', []):
-        if not t.get('item'): continue
+        if not t.get('item'):
+            continue
         txn = Transaction.objects.create(
             user=request.user,
             item=t['item'],
@@ -173,44 +202,90 @@ def parse_input(request):
             category=t.get('category', 'General'),
             source_type=source_type
         )
-        created_transactions.append(txn)
+        created.append(txn)
 
-    return Response(TransactionSerializer(created_transactions, many=True).data, status=status.HTTP_201_CREATED)
+    if not created:
+        return Response(
+            {"error": "No items could be extracted from this receipt. Try a clearer photo."},
+            status=status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+
+    return Response(
+        TransactionSerializer(created, many=True).data,
+        status=status.HTTP_201_CREATED
+    )
+
+
+# ─── Transaction Views ───────────────────────────────────────────────────────
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_transactions(request):
-    transactions = Transaction.objects.filter(user=request.user).order_by('-created_at')
-    return Response(TransactionSerializer(transactions, many=True).data)
+    txns = Transaction.objects.filter(user=request.user).order_by('-created_at')
+    return Response(TransactionSerializer(txns, many=True).data)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def clear_transactions(request):
     Transaction.objects.filter(user=request.user).delete()
-    return Response({"message": "All transactions cleared successfully"}, status=status.HTTP_200_OK)
+    return Response({"message": "All transactions cleared successfully"})
+
+
+# ─── Admin Views ─────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_metrics(request):
+    if not request.user.is_staff:
+        return Response(
+            {"error": "Admin access required"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    all_txns = Transaction.objects.all()
+    total_revenue = sum(float(t.price) * t.quantity for t in all_txns)
+
+    sources = {}
+    for t in all_txns:
+        sources[t.source_type] = sources.get(t.source_type, 0) + 1
+
+    payments = {}
+    for t in all_txns:
+        payments[t.payment_method] = payments.get(t.payment_method, 0) + 1
+
+    return Response({
+        "total_users":        User.objects.count(),
+        "total_transactions": all_txns.count(),
+        "total_revenue":      total_revenue,
+        "source_breakdown":   sources,
+        "payment_breakdown":  payments,
+    })
+
+
+# ─── Utility Views ───────────────────────────────────────────────────────────
 
 from django.core.management import call_command
 
 @api_view(['POST'])
 def seed_database(request):
     call_command('seed_data')
-    return Response({"message": "Database seeded successfully"}, status=status.HTTP_200_OK)
+    return Response({"message": "Database seeded successfully"})
+
 
 @api_view(['GET'])
 def api_index(request):
     return Response({
-        "status": "Snaply API is online",
+        "status":  "Snaply API is online",
         "version": "1.0.0",
+        "note":    "Users do not need API keys. The Gemini key is server-side only.",
         "endpoints": {
-            "register": "/api/auth/register/",
-            "login": "/api/auth/login/",
-            "metrics": "/api/admin/metrics/",
-            "parse": "/api/parse/",
-            "transactions": "/api/transactions/",
-            "clear_transactions": "/api/transactions/clear/",
-            "seed": "/api/seed/"
+            "register":          "/api/auth/register/",
+            "login":             "/api/auth/login/",
+            "parse_receipt":     "/api/parse/",
+            "transactions":      "/api/transactions/",
+            "clear_transactions":"/api/transactions/clear/",
+            "admin_metrics":     "/api/admin/metrics/",
+            "seed":              "/api/seed/",
         }
     })
-
-
-
